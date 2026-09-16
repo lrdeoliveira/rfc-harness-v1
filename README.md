@@ -1,4 +1,4 @@
-# rfc-harness-v1 (`rfc-harness`)
+# rfc-harness 1.1.0 (`rfc-harness`)
 
 Canonical path: `/Volumes/M5SSD/Projetos/rfc-harness-v1`. Fork of Beer and Code `bc-harness` 0.2.0.
 
@@ -47,10 +47,17 @@ Cross-cutting: **`/ai-context`** keeps the context tree (`AGENTS.md`, `CLAUDE.md
 This repository is a Claude Code plugin (`.claude-plugin/plugin.json`). Install it via marketplace/local path according to your plugin setup:
 
 ```
-/plugin install bc-harness
+/plugin marketplace add /Volumes/M5SSD/Projetos/rfc-harness-v1
+/plugin install rfc-harness
 ```
 
-Commands are namespaced: `/bc-harness:init`, `/bc-harness:plan`, etc. (abbreviated without the namespace throughout this document).
+Commands are namespaced: `/rfc-harness:init`, `/rfc-harness:plan`, `/rfc-harness:ai-context` (abbreviated without the namespace throughout this document).
+
+To refresh Cursor / OpenCode / Codex / SGM copies:
+
+```
+./scripts/sync-hosts.sh
+```
 
 `ralph.sh` is a standalone bash script — copy or reference `scripts/ralph.sh` and run it directly in the target project's repository.
 

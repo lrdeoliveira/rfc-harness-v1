@@ -1,8 +1,10 @@
-# rfc-harness-v1 — canônico
+# rfc-harness 1.1.0 — canônico
 
 Este diretório é o harness **que vale**.
 
 Caminho: `/Volumes/M5SSD/Projetos/rfc-harness-v1`
+
+Slash commands padronizados em Cursor, Claude, OpenCode e Codex via `scripts/sync-hosts.sh`.
 
 Origem (não usar para rodar):
 

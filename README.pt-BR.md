@@ -1,4 +1,4 @@
-# rfc-harness-v1 (`rfc-harness`)
+# rfc-harness 1.1.0 (`rfc-harness`)
 
 Canônico em `/Volumes/M5SSD/Projetos/rfc-harness-v1`. Fork do Beer and Code harness (`bc-harness` 0.2.0) com ADHD nos routers, `detect-project.sh` e **Kanban do Ralph**.
 
@@ -55,7 +55,13 @@ O repositório é um plugin de Claude Code (`.claude-plugin/plugin.json`). Insta
 /plugin install rfc-harness
 ```
 
-Os comandos ficam disponíveis com namespace: `/rfc-harness:init`, `/rfc-harness:plan`, etc. (nesta documentação, abreviados sem o namespace).
+Os comandos ficam disponíveis com namespace: `/rfc-harness:init`, `/rfc-harness:plan`, `/rfc-harness:ai-context` (nesta documentação, abreviados sem o namespace).
+
+Para atualizar as cópias Cursor / OpenCode / Codex / SGM:
+
+```
+./scripts/sync-hosts.sh
+```
 
 O `ralph.sh` é um script bash independente — copie ou referencie `scripts/ralph.sh` e rode direto no repositório do projeto-alvo.
 
