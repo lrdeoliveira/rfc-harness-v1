@@ -1,0 +1,10 @@
+{
+  "name": "rfc-harness",
+  "version": "1.0.0",
+  "description": "rfc-harness-v1 — RedFoxCode harness (upstream: Beer and Code bc-harness). Init → plan → ralph, com board Kanban e engines cursor/claude/minimax/codex.",
+  "author": {
+    "name": "RedFoxCode",
+    "email": "luciano@redfoxcode.com"
+  },
+  "license": "MIT"
+}

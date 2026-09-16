@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RALPH</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b0d11;
+      --bg-2: #10131a;
+      --panel: #151922;
+      --card: #1a1f2b;
+      --line: #2a3142;
+      --text: #e8edf5;
+      --muted: #8b93a7;
+      --red: #e11d2e;
+      --red-dim: rgba(225, 29, 46, .18);
+      --green: #3dd68c;
+      --green-dim: rgba(61, 214, 140, .16);
+      --amber: #f5c542;
+      --blue: #6ea8ff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background:
+        radial-gradient(1200px 500px at 10% -10%, rgba(225, 29, 46, .12), transparent 55%),
+        var(--bg);
+      color: var(--text);
+      font-family: "IBM Plex Sans", sans-serif;
+      letter-spacing: .01em;
+    }
+    body::before {
+      content: "";
+      position: fixed; inset: 0; pointer-events: none; opacity: .04;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+    }
+    .wrap { max-width: 1440px; margin: 0 auto; padding: 28px 32px 48px; position: relative; }
+    header {
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
+      margin-bottom: 18px;
+    }
+    .brand {
+      font-family: "Barlow Condensed", sans-serif;
+      font-weight: 800; font-size: 56px; line-height: .85;
+      letter-spacing: .04em;
+    }
+    .brand span { color: var(--red); }
+    .head-right { text-align: right; min-width: 280px; }
+    .completed {
+      font-family: "Barlow Condensed", sans-serif;
+      font-weight: 700; font-size: 28px; letter-spacing: .02em;
+    }
+    .completed b { font-weight: 800; }
+    .task-meta { color: var(--muted); margin-top: 4px; font-size: 14px; }
+    .bar {
+      height: 10px; background: #232838; border-radius: 99px; overflow: hidden;
+      margin: 16px 0 28px; box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .bar > i {
+      display: block; height: 100%; width: 0;
+      background: linear-gradient(90deg, #b91c26, var(--red));
+      border-radius: 99px;
+      transition: width .5s ease;
+      box-shadow: 0 0 16px rgba(225, 29, 46, .45);
+    }
+    .runline {
+      display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted);
+      font-family: "IBM Plex Mono", monospace; font-size: 12px;
+      margin: -12px 0 22px;
+    }
+    .runline strong { color: var(--text); font-weight: 500; }
+    .phases-strip {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px; margin-bottom: 28px;
+    }
+    .pchip {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+      padding: 10px 12px; min-height: 64px;
+    }
+    .pchip .n { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--muted); }
+    .pchip .t { font-size: 13px; font-weight: 600; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pchip.running { border-color: var(--red); box-shadow: 0 0 0 1px var(--red-dim); }
+    .pchip.done { border-color: rgba(61,214,140,.35); }
+    .pchip.failed { border-color: var(--red); }
+    .board { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; align-items: start; }
+    .col { display: flex; flex-direction: column; min-height: 0; }
+    @media (max-width: 980px) { .board { grid-template-columns: 1fr; } .brand { font-size: 42px; } }
+    .col h2 {
+      font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+    }
+    .col h2 em {
+      font-style: normal; font-family: "IBM Plex Mono", monospace; font-size: 11px;
+      background: #222736; color: var(--text); border-radius: 99px; padding: 1px 8px;
+    }
+    .stack { display: flex; flex-direction: column; gap: 14px; min-height: 120px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 16px 14px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+      background: #3a4258;
+    }
+    .card.running::before { background: var(--red); }
+    .card.done::before { background: var(--green); }
+    .card.failed::before { background: var(--red); }
+    .card.incomplete::before { background: var(--amber); }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .phase {
+      font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--muted);
+      letter-spacing: .08em; text-transform: uppercase;
+    }
+    .pill {
+      font-size: 11px; font-weight: 600; border-radius: 99px; padding: 4px 10px;
+      letter-spacing: .02em;
+    }
+    .pill.running { background: var(--red-dim); color: #ff6b78; }
+    .pill.done { background: var(--green-dim); color: var(--green); }
+    .pill.pending, .pill.skipped { background: #222736; color: var(--muted); }
+    .pill.failed { background: var(--red-dim); color: #ff6b78; }
+    .pill.incomplete { background: rgba(245, 197, 66, .15); color: var(--amber); }
+    .title { font-size: 18px; font-weight: 600; margin: 10px 0 8px; line-height: 1.25; }
+    .dur {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--muted); font-size: 12px; margin-bottom: 10px;
+    }
+    .dur svg { width: 13px; height: 13px; }
+    .desc { color: #b7becc; font-size: 13.5px; line-height: 1.45; margin-bottom: 12px; }
+    .files { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .file {
+      font-family: "IBM Plex Mono", monospace; font-size: 11px;
+      background: #121622; border: 1px solid #2b3347; color: #c9d0de;
+      border-radius: 6px; padding: 3px 7px;
+    }
+    .gates { display: flex; gap: 6px; margin-bottom: 12px; }
+    .gate {
+      font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .04em;
+      border-radius: 5px; padding: 3px 6px; background: #121622; color: var(--muted);
+      border: 1px solid #2b3347;
+    }
+    .gate.pass { color: var(--green); border-color: rgba(61,214,140,.35); }
+    .gate.run { color: var(--amber); border-color: rgba(245,197,66,.35); }
+    .gate.fail { color: #ff6b78; border-color: rgba(225,29,46,.45); }
+    .tasks { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    .tasks li {
+      display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: start;
+      font-size: 12.5px; color: #c5ccd8;
+    }
+    .dot {
+      width: 10px; height: 10px; border-radius: 99px; margin-top: 4px;
+      border: 2px solid #4a5368; background: transparent;
+    }
+    .dot.done { background: var(--green); border-color: var(--green); }
+    .dot.running { background: var(--red); border-color: var(--red); box-shadow: 0 0 8px var(--red); }
+    .dot.incomplete { background: var(--amber); border-color: var(--amber); }
+    .tstat { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .idle {
+      color: var(--muted); padding: 48px 8px; text-align: center; line-height: 1.6;
+    }
+    .idle code { color: var(--text); font-family: "IBM Plex Mono", monospace; }
+    .activity {
+      font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--blue);
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">RAL<span>PH</span></div>
+      <div class="head-right">
+        <div class="completed" id="completed">— / — Completed</div>
+        <div class="task-meta" id="task-meta">aguardando run</div>
+      </div>
+    </header>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="runline" id="runline"></div>
+    <div class="phases-strip" id="strip"></div>
+    <div class="board">
+      <section class="col">
+        <h2>Backlog <em id="n-backlog">0</em></h2>
+        <div class="stack" id="backlog"></div>
+      </section>
+      <section class="col">
+        <h2>In Progress <em id="n-progress">0</em></h2>
+        <div class="stack" id="progress"></div>
+      </section>
+      <section class="col">
+        <h2>Done <em id="n-done">0</em></h2>
+        <div class="stack" id="done"></div>
+      </section>
+    </div>
+  </div>
+  <script>
+    const clock = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+
+    const colOf = (status) => {
+      if (status === "done") return "done";
+      if (status === "running" || status === "failed") return "progress";
+      return "backlog";
+    };
+
+    const pillLabel = (s) => ({
+      running: "In Progress", done: "Done", pending: "Backlog",
+      skipped: "Skipped", failed: "Failed", incomplete: "Incomplete"
+    }[s] || s);
+
+    function card(p) {
+      const files = (p.files || []).map(f => `<span class="file">${esc(f)}</span>`).join("");
+      const gates = (p.gates || []).map((g, i) => `<span class="gate ${g}">G${i} ${g}</span>`).join("");
+      const tasks = (p.tasks || []).map(t => `
+        <li>
+          <span class="dot ${t.status}"></span>
+          <span>${esc(t.title)}</span>
+          <span class="tstat">${esc(t.status)}</span>
+        </li>`).join("");
+      const act = p.activity ? `<div class="activity">${esc(p.activity)}</div>` : "";
+      return `
+        <article class="card ${p.status}">
+          <div class="card-top">
+            <div class="phase">Phase ${p.num}</div>
+            <span class="pill ${p.status}">${pillLabel(p.status)}</span>
+          </div>
+          <div class="title">${esc(p.title)}</div>
+          <div class="dur">${clock}${esc(p.duration || "—")}${p.attempt ? ` · ciclo ${p.attempt}` : ""}</div>
+          ${p.description ? `<div class="desc">${esc(p.description)}</div>` : ""}
+          ${files ? `<div class="files">${files}</div>` : ""}
+          ${gates ? `<div class="gates">${gates}</div>` : ""}
+          ${tasks ? `<ul class="tasks">${tasks}</ul>` : ""}
+          ${act}
+        </article>`;
+    }
+
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, c => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[c]));
+    }
+
+    function render(d) {
+      if (!d || d.idle) {
+        document.getElementById("completed").textContent = "— / — Completed";
+        document.getElementById("task-meta").textContent = "nenhum run em .phases/state";
+        document.getElementById("bar").style.width = "0%";
+        document.getElementById("runline").innerHTML = "";
+        document.getElementById("strip").innerHTML = "";
+        const msg = `<div class="idle">Nenhum ralph rodando neste repo.<br>Na raiz do projeto: <code>ralph cursor</code> · <code>ralph claude</code> · <code>ralph minimax</code> · <code>ralph codex</code></div>`;
+        ["backlog", "progress", "done"].forEach((id, i) => {
+          document.getElementById(id).innerHTML = i === 1 ? msg : "";
+          document.getElementById("n-" + id).textContent = "0";
+        });
+        return;
+      }
+      const c = d.counts;
+      document.getElementById("completed").innerHTML = `<b>${c.done_phases}</b>/${c.total_phases} Completed`;
+      document.getElementById("task-meta").textContent = `${c.pct}% of ${c.total_tasks} tasks`;
+      document.getElementById("bar").style.width = c.pct + "%";
+      const m = d.meta || {};
+      document.getElementById("runline").innerHTML = [
+        m.project && `<span>projeto <strong>${esc(m.project)}</strong></span>`,
+        m.engine && `<span>engine <strong>${esc(m.engine)}</strong></span>`,
+        m.status && `<span>status <strong>${esc(m.status)}</strong></span>`,
+        m.activity && `<span>${esc(m.activity)}</span>`,
+        m.run && `<span>${esc(m.run)}</span>`
+      ].filter(Boolean).join("");
+
+      document.getElementById("strip").innerHTML = (d.phases || []).map(p =>
+        `<div class="pchip ${p.status}"><div class="n">F${p.num} · ${esc(p.status)}</div><div class="t">${esc(p.title)}</div></div>`
+      ).join("");
+
+      const cols = { backlog: [], progress: [], done: [] };
+      (d.phases || []).forEach(p => cols[colOf(p.status)].push(p));
+      for (const [id, list] of Object.entries(cols)) {
+        document.getElementById("n-" + id).textContent = list.length;
+        document.getElementById(id).innerHTML = list.length
+          ? list.map(card).join("")
+          : `<div class="idle">vazio</div>`;
+      }
+    }
+
+    async function tick() {
+      try {
+        const r = await fetch("/state.json?ts=" + Date.now(), { cache: "no-store" });
+        render(await r.json());
+      } catch (e) {
+        document.getElementById("task-meta").textContent = "board offline";
+      }
+    }
+    tick();
+    setInterval(tick, 1000);
+  </script>
+</body>
+</html>

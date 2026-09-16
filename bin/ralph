@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# rfc-harness-v1 — um comando por engine.
+# Uso (na raiz do projeto):
+#   ralph cursor [PHASES.md]
+#   ralph claude [PHASES.md]
+#   ralph minimax [PHASES.md]    # OpenCode + MiniMax
+#   ralph codex [PHASES.md]
+#   ralph board                  # só a interface
+set -euo pipefail
+
+HARNESS="${RALPH_HARNESS:-/Volumes/M5SSD/Projetos/rfc-harness-v1}"
+RALPH="$HARNESS/scripts/ralph.sh"
+BOARD="$HARNESS/scripts/ralph-board.sh"
+PORT="${RALPH_BOARD_PORT:-3847}"
+
+usage() {
+  cat <<EOF
+rfc-harness-v1  —  na raiz do git do projeto
+
+  ralph cursor [arquivo]     Cursor Agent
+  ralph claude [arquivo]     Claude Code
+  ralph minimax [arquivo]    OpenCode + MiniMax
+  ralph codex [arquivo]      Codex CLI
+  ralph board                só o Kanban (http://127.0.0.1:${PORT})
+
+Sem arquivo: .spec/init/project-phases.md  (ou o PHASES.md que o ralph achar)
+EOF
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+  if [[ -f .phases/state/run.tsv ]]; then
+    echo
+    echo "estado encontrado — abrindo board"
+    exec "$BOARD" --port "$PORT" .
+  fi
+  exit 0
+fi
+
+cmd="$1"; shift || true
+
+case "$cmd" in
+  -h|--help|help) usage; exit 0 ;;
+  board|watch|ui)
+    python3 "$HARNESS/scripts/ralph-board.py" --port "$PORT" . &
+    pid=$!
+    sleep 0.4
+    open "http://127.0.0.1:${PORT}" 2>/dev/null || true
+    echo "Kanban em http://127.0.0.1:${PORT}  (Ctrl-C para sair)"
+    wait "$pid"
+    ;;
+  cursor|claude|codex|minimax|opencode)
+    exec bash "$RALPH" --engine "$cmd" --board "$@"
+    ;;
+  *)
+    echo "engine desconhecida: $cmd" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

@@ -1,0 +1,22 @@
+# IDEs
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+
+# ralph.sh runtime artifacts
+.phases/
+
+docs
+# Mira
+decks/
+mira-templates/
+.mira/
+CLAUDE.md
+mira.config.json
