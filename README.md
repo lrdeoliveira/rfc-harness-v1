@@ -10,7 +10,7 @@ ralph cursor | ralph claude | ralph minimax | ralph codex | ralph board
 
 The run visualization is the web board. `ralph` opens `http://127.0.0.1:3847` on this machine only (override the port with `RALPH_BOARD_PORT`). `ralph board` reopens the board for a run already on disk.
 
-![Ralph Kanban board, with phases in Backlog, In Progress, and Done](docs/ralph-board.png)
+![Ralph Kanban board, with phases in Backlog, In Progress, and Done](assets/ralph-board.png)
 
 The header shows the mark, how many phases are done, and the run bar. The line under it names the project, engine, status, and run id. Each phase is a chip; the one in execution has a red border.
 

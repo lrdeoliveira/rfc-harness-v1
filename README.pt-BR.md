@@ -16,7 +16,7 @@ ralph board           # só o Kanban (http://127.0.0.1:3847)
 
 A visualização do run é o quadro web. O comando `ralph` abre sozinho `http://127.0.0.1:3847` (só nesta máquina; a porta muda com `RALPH_BOARD_PORT`). `ralph board` reabre o quadro de um run que já está no disco.
 
-![Quadro Kanban do Ralph, com as fases em Backlog, In Progress e Done](docs/ralph-board.png)
+![Quadro Kanban do Ralph, com as fases em Backlog, In Progress e Done](assets/ralph-board.png)
 
 O topo mostra a marca, a fração de fases concluídas e a barra do run. A faixa de baixo identifica projeto, engine, status e o id do run. Cada fase vira um chip; a fase em execução fica com a borda vermelha.
 
