@@ -1,6 +1,6 @@
 # rfc-harness 2.0.0 (`rfc-harness`)
 
-Canonical path: `/Volumes/M5SSD/Projetos/rfc-harness-v1`. Fork of Beer and Code `bc-harness` 0.2.0.
+rfc-harness is based on [bc-harness](https://github.com/beerandcodeteam/beer-and-code-harness) from [Beer and Code](https://beerandcode.com.br/). Canonical path: `/Volumes/M5SSD/Projetos/rfc-harness-v1`.
 
 ```
 ralph cursor | ralph claude | ralph minimax | ralph codex | ralph board
