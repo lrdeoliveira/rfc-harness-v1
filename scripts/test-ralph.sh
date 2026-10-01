@@ -232,6 +232,15 @@ if [ "$scenario" = "false-429" ]; then
   exit 0
 fi
 
+# cursor-hang: o trabalho ja foi para o disco, o stream para em thinking
+# completed e o processo nao encerra. O ralph tem que cortar a sessao e
+# deixar os gates julgarem o codigo.
+if [ "$scenario" = "cursor-hang" ]; then
+  echo '{"type":"thinking","subtype":"completed","text":"pronto"}'
+  sleep 120
+  exit 0
+fi
+
 if [ "$name" = "claude" ] || [ "$name" = "agent" ] || [ "$name" = "cursor-agent" ]; then
   if [ "$outfmt" = "stream-json" ]; then
     n_tasks=$(grep -cE '^[[:space:]]*- \[[ x]\]' <<< "$prompt")
@@ -1439,6 +1448,31 @@ if case_enabled cursor-engine; then
   assert_eq 3 "$(commits "$d")" "2 commits de fase (1 fixture + 2)"
   assert_eq 2 "$(cat "$d/state/impl_calls")" "1 sessao de implementacao por fase (2 fases)"
   assert_eq 2 "$(cat "$d/state/verify_calls")" "gate 3 rodou em toda fase (--mode ask)"
+fi
+
+# ---------------------------------------------------------------------------
+# 41. Cursor que escreve o codigo e nao encerra a sessao -> nao queima o ciclo
+# ---------------------------------------------------------------------------
+if case_enabled cursor-hang; then
+  header "41. cursor ocioso apos o trabalho -> gates seguem e a fase passa"
+  d=$(new_case cursor-hang)
+  rc=0
+  (
+    cd "$d/repo" || exit 1
+    env -u RALPH_TEST_CMD -u RALPH_MAX_CYCLES -u RALPH_MAX_LIMIT_WAITS \
+    PATH="$d/bin:$PATH" \
+    MOCK_STATE="$d/state" \
+    MOCK_SCENARIO=cursor-hang \
+    MOCK_TEST_CMD="$d/test.sh" \
+    RALPH_LIMIT_WAIT_DEFAULT=1 \
+    RALPH_LIMIT_BUFFER=1 \
+    RALPH_STALL_SECS=3 \
+      bash "$RALPH" --engine cursor --test-cmd "$d/test.sh" --max-cycles 1 > "$d/out.log" 2>&1
+  ) || rc=$?
+  assert_eq 0 "$rc" "exit 0"
+  assert_contains "$d/out.log" "sem output" "encerrou a sessao ociosa"
+  assert_contains "$d/out.log" "feat(phase-1)" "fase 1 commitada apesar do hang"
+  assert_eq 3 "$(commits "$d")" "fixture + 2 fases"
 fi
 
 # ---------------------------------------------------------------------------

@@ -1251,6 +1251,12 @@ Se encontrar um destes casos, NAO pergunte — aja assim:
   do escopo da fase) → NAO execute; siga sem ele e registre no contrato;
 - suite vermelha → um ciclo de auto-reparo nesta sessao; se persistir, termine
   com o log real — o orquestrador abre um ciclo de correcao com a causa.
+
+## Encerramento da sessao
+Voce roda em sessao nao-interativa: o processo tem que MORRER quando este turno acaba.
+- NUNCA deixe servidor, browser ou comando em background (`&`, `nohup`, `run_in_background`).
+- Se subiu um servidor ou um browser para olhar a tela, encerre esse processo antes da resposta final.
+- A ultima coisa que voce escreve e a resposta final, com as linhas RALPH-TASK. Nao anuncie que vai esperar algo.
 CONT
 }
 
@@ -1523,6 +1529,121 @@ wait_for_reset() {
 # Engine
 # ---------------------------------------------------------------------------
 
+# A ultima linha do log ainda e um tool_call "started": a ferramenta segue
+# aberta e o silencio nao e travamento.
+log_tool_open() {
+  local log_file="$1" line
+  [ -s "$log_file" ] || return 1
+  line=$(tail -n 1 "$log_file" 2>/dev/null || true)
+  [[ "$line" == *'"type":"tool_call"'* || "$line" == *'"type": "tool_call"'* ]] || return 1
+  grep -qE '"subtype"[[:space:]]*:[[:space:]]*"started"' <<< "$line"
+}
+
+kill_descendants() {
+  local pid="$1" sig="$2" child
+  while IFS= read -r child; do
+    [ -n "$child" ] || continue
+    kill_descendants "$child" "$sig"
+  done < <(pgrep -P "$pid" 2>/dev/null || true)
+  kill "-$sig" "$pid" 2>/dev/null || true
+}
+
+# engine_wait <pid> <log>
+# Causa do travamento (Cursor agent -p, visto na fase 3 do rfc-ai, 3 ciclos):
+# o CLI escreve thinking/completed e nao sai. --approve-mcps sobe os MCP de
+# ~/.cursor/mcp.json como filhos, e a sessao ainda deixa servidor e browser
+# vivos. O event loop do Node nao esvazia, o processo fica em sleep a 0% de
+# CPU, e o ralph espera para sempre. Matar na mao da exit 143, o gate 0
+# reprova e queima o ciclo mesmo com o codigo pronto.
+# Aqui: ferramenta aberta espera RALPH_TOOL_STALL_SECS (default 1200); sem
+# ferramenta aberta espera RALPH_STALL_SECS (default 180). Log vazio continua
+# falha real. Log com conteudo retorna 0 para os gates 2 e 3 julgarem o codigo.
+engine_wait() {
+  local pid="$1" log_file="$2"
+  local stall="${RALPH_STALL_SECS:-180}"
+  local tool_stall="${RALPH_TOOL_STALL_SECS:-1200}"
+  local last_size=-1 last_change tool_open_since now size recovered=0
+  last_change=$(date +%s)
+  tool_open_since=0
+
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 5
+    kill -0 "$pid" 2>/dev/null || break
+    size=0
+    [ -f "$log_file" ] && size=$(wc -c < "$log_file" | tr -d ' ')
+    now=$(date +%s)
+    if [ "$size" != "$last_size" ]; then
+      last_size=$size
+      last_change=$now
+      tool_open_since=0
+      continue
+    fi
+    if log_tool_open "$log_file"; then
+      [ "$tool_open_since" -eq 0 ] && tool_open_since=$now
+      [ $((now - tool_open_since)) -lt "$tool_stall" ] && continue
+      warn "Ferramenta aberta sem output ha $(format_duration $((now - tool_open_since))). Encerrando a sessao para os gates avaliarem o codigo."
+    else
+      [ $((now - last_change)) -lt "$stall" ] && continue
+      warn "Engine sem output ha $(format_duration "$stall") e sem ferramenta aberta. Encerrando a sessao para os gates avaliarem o codigo."
+    fi
+    [ "$size" -gt 0 ] && recovered=1
+    kill_descendants "$pid" TERM
+    sleep 2
+    if kill -0 "$pid" 2>/dev/null; then
+      kill_descendants "$pid" KILL
+    fi
+    break
+  done
+
+  local rc=0
+  wait "$pid" 2>/dev/null || rc=$?
+  if [ "$recovered" -eq 1 ]; then
+    return 0
+  fi
+  return "$rc"
+}
+
+# spawn_engine_watched <log> <watch 0|1> <phase_num> <quiet> <phase_file> -- cmd...
+# O engine sai do foreground: um hang apos o ultimo evento nao segura o ralph.
+# Com job control, o PGID do pipe e o PID do engine — e esse processo que o
+# engine_wait espera e, se precisar, encerra.
+spawn_engine_watched() {
+  local log_file="$1" do_watch="$2" phase_num="$3" quiet="$4" phase_file="$5"
+  shift 5
+  : > "$log_file"
+
+  local monitor_was="off"
+  case $- in
+    *m*) monitor_was="on" ;;
+  esac
+  set -m
+
+  local last_pid agent_pid self_pgid rc=0
+  if [ "$do_watch" -eq 1 ]; then
+    "$@" < /dev/null 2>&1 | tee "$log_file" | stream_watch "$LIVE_STATE" "$phase_num" "$quiet" "$phase_file" &
+  else
+    "$@" < /dev/null 2>&1 | tee "$log_file" &
+  fi
+  last_pid=$!
+  self_pgid=$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ' || true)
+  agent_pid=$(ps -o pgid= -p "$last_pid" 2>/dev/null | tr -d ' ' || true)
+  if [ -z "$agent_pid" ] || [ "$agent_pid" = "$self_pgid" ]; then
+    agent_pid=$last_pid
+  fi
+
+  engine_wait "$agent_pid" "$log_file" || rc=$?
+
+  if [ -n "$agent_pid" ] && [ "$agent_pid" != "$self_pgid" ]; then
+    kill -TERM -- "-$agent_pid" 2>/dev/null || kill -TERM "-$agent_pid" 2>/dev/null || true
+  fi
+  wait "$last_pid" 2>/dev/null || true
+
+  if [ "$monitor_was" != "on" ]; then
+    set +m
+  fi
+  return "$rc"
+}
+
 # run_engine <prompt_file> <log_file> <mode: impl|verify>
 # Loop de resiliencia a limite de uso: nao consome ciclo de correcao.
 run_engine() {
@@ -1551,24 +1672,20 @@ run_engine() {
       # < /dev/null: evita o CLI engolir o stream de quem chamou.
       if [[ "$mode" == "verify" ]]; then
         # Sem --force: --mode ask e read-only; sandbox enabled reforca.
-        "$ENGINE_BIN" -p --trust --sandbox enabled --mode ask --approve-mcps \
+        spawn_engine_watched "$log_file" 0 0 0 "" \
+          "$ENGINE_BIN" -p --trust --sandbox enabled --mode ask --approve-mcps \
           "${model_args[@]}" \
           --output-format text \
           --workspace "$PWD" \
-          "$(cat "$prompt_file")" < /dev/null 2>&1 | tee "$log_file" || rc=$?
+          "$(cat "$prompt_file")" || rc=$?
       else
         local quiet=0
         $DASHBOARD && quiet=1
-        if "$ENGINE_BIN" -p --force --trust --sandbox disabled --approve-mcps \
-             --output-format stream-json \
-             --workspace "$PWD" \
-             "$(cat "$prompt_file")" < /dev/null 2>&1 \
-             | tee "$log_file" \
-             | stream_watch "$LIVE_STATE" "${RALPH_PHASE_NUM:-0}" "$quiet" "$CURRENT_PHASE_FILE"; then
-          rc=0
-        else
-          rc=$?
-        fi
+        spawn_engine_watched "$log_file" 1 "${RALPH_PHASE_NUM:-0}" "$quiet" "$CURRENT_PHASE_FILE" \
+          "$ENGINE_BIN" -p --force --trust --sandbox disabled --approve-mcps \
+          --output-format stream-json \
+          --workspace "$PWD" \
+          "$(cat "$prompt_file")" || rc=$?
       fi
     elif [[ "$ENGINE" == "minimax" || "$ENGINE" == "opencode" ]]; then
       local oc_model=()
