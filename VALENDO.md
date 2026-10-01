@@ -1,4 +1,4 @@
-# rfc-harness 1.1.0 — canônico
+# rfc-harness 2.0.0 — canônico
 
 Este diretório é o harness **que vale**.
 

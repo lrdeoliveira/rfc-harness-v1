@@ -1,4 +1,4 @@
-# rfc-harness 1.1.0 (`rfc-harness`)
+# rfc-harness 2.0.0 (`rfc-harness`)
 
 Canonical path: `/Volumes/M5SSD/Projetos/rfc-harness-v1`. Fork of Beer and Code `bc-harness` 0.2.0.
 

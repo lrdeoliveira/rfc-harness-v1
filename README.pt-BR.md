@@ -1,4 +1,4 @@
-# rfc-harness 1.1.0 (`rfc-harness`)
+# rfc-harness 2.0.0 (`rfc-harness`)
 
 Canônico em `/Volumes/M5SSD/Projetos/rfc-harness-v1`. Fork do Beer and Code harness (`bc-harness` 0.2.0) com ADHD nos routers, `detect-project.sh` e **Kanban do Ralph**.
 
