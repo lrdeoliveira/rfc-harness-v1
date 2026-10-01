@@ -6,6 +6,18 @@ Canonical path: `/Volumes/M5SSD/Projetos/rfc-harness-v1`. Fork of Beer and Code 
 ralph cursor | ralph claude | ralph minimax | ralph codex | ralph board
 ```
 
+## Kanban board
+
+The run visualization is the web board. `ralph` opens `http://127.0.0.1:3847` on this machine only (override the port with `RALPH_BOARD_PORT`). `ralph board` reopens the board for a run already on disk.
+
+![Ralph Kanban board, with phases in Backlog, In Progress, and Done](docs/ralph-board.png)
+
+The header shows the mark, how many phases are done, and the run bar. The line under it names the project, engine, status, and run id. Each phase is a chip; the one in execution has a red border.
+
+The three columns are **Backlog**, **In Progress**, and **Done**. A phase card shows duration, cycle, a slice of the phase text, cited files, the four gates (G0–G3), and the tasks. A failed phase stays in In Progress. The page reads `/state.json` every second: `run.tsv` is the orchestrator state and `live.tsv` is the task the session is on right now.
+
+The terminal panel (`ralph-watch.sh`, `--dashboard`) is the same state drawn in the shell. The board is the interface for watching the run.
+
 > 🇧🇷 [Documentação em português](README.pt-BR.md)
 
 A [Claude Code](https://claude.com/claude-code) plugin with commands, agents, and scripts that take a project from idea to implementation in a structured way: formal specification, phased planning, and autonomous execution with mechanical validation — while keeping a human in control at every decision point.
@@ -206,6 +218,7 @@ Laravel Sail projects: the suite runs **inside the container** (`vendor/bin/sail
 | `--test-cmd "<cmd>"` | Project test command (gate 2) |
 | `--no-verify` | Disables gate 3 |
 | `--dashboard` | Live panel in the terminal (see below) |
+| `--board` | Opens the Kanban board at `http://127.0.0.1:3847` |
 
 | Variable | Effect |
 |---|---|
@@ -228,9 +241,9 @@ When `detect-project.sh` sits next to `ralph.sh`, preflight publishes the OBSERV
 
 Exit code: `0` = all phases green; `1` = some phase failed or aborted.
 
-## `scripts/ralph-watch.sh` — live panel
+## `scripts/ralph-watch.sh` — terminal panel
 
-ralph publishes run state to `.phases/state/` **always**, with or without `--dashboard`. `ralph-watch.sh` reads that state and draws the panel:
+The Kanban board is the run visualization. This script is the same reading, drawn in the terminal. ralph publishes run state to `.phases/state/` **always**, with or without `--dashboard`. `ralph-watch.sh` reads that state and draws the panel:
 
 ```bash
 ./scripts/ralph.sh --engine claude --dashboard   # panel in the same terminal
@@ -337,7 +350,9 @@ agents/                        specifier, clarifier, planner,
                                ai-context-{inspector,core,docs}
 scripts/
   ralph.sh                     phase-by-phase execution orchestrator
-  ralph-watch.sh               live run panel (reads .phases/state/)
+  ralph-board.py               Kanban board (127.0.0.1:3847)
+  ralph-board.html             board interface
+  ralph-watch.sh               terminal run panel (reads .phases/state/)
   detect-project.sh            OBSERVED stack/env (never reads .env)
   init-status.sh               init-chain panel (presence, freshness, stack)
   test-ralph.sh                red/green suite for ralph with a mock engine

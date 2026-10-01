@@ -12,6 +12,18 @@ ralph codex           # Codex CLI + board
 ralph board           # só o Kanban (http://127.0.0.1:3847)
 ```
 
+## Quadro Kanban
+
+A visualização do run é o quadro web. O comando `ralph` abre sozinho `http://127.0.0.1:3847` (só nesta máquina; a porta muda com `RALPH_BOARD_PORT`). `ralph board` reabre o quadro de um run que já está no disco.
+
+![Quadro Kanban do Ralph, com as fases em Backlog, In Progress e Done](docs/ralph-board.png)
+
+O topo mostra a marca, a fração de fases concluídas e a barra do run. A faixa de baixo identifica projeto, engine, status e o id do run. Cada fase vira um chip; a fase em execução fica com a borda vermelha.
+
+As três colunas são **Backlog**, **In Progress** e **Done**. O cartão da fase traz duração, ciclo, trecho do enunciado, arquivos citados, os quatro gates (G0–G3) e as tasks. Fase que falhou permanece em In Progress. A página lê `/state.json` a cada segundo: `run.tsv` é o estado do orquestrador e `live.tsv` é a task que a sessão está fazendo agora.
+
+O painel do terminal (`ralph-watch.sh`, `--dashboard`) continua disponível para quem está no shell. O quadro é a interface de olhar o run.
+
 Plugin de [Claude Code](https://claude.com/claude-code) com comandos, agentes e scripts para levar um projeto da ideia à implementação de forma estruturada: especificação formal, planejamento em fases e execução autônoma com validação mecânica — sem abrir mão do controle humano nos pontos de decisão.
 
 O harness é **agnóstico de stack**: quem define linguagem, framework, comandos e convenções são os documentos do próprio projeto (`AGENTS.md`, `CLAUDE.md`, cadeia `.spec/`), nunca o harness.
@@ -211,7 +223,7 @@ Projeto Laravel Sail: a suite roda **dentro do container** (`vendor/bin/sail tes
 | `--test-cmd "<cmd>"` | Comando de teste do projeto (gate 2) |
 | `--no-verify` | Desliga o gate 3 |
 | `--dashboard` | Painel ao vivo no terminal (TUI) |
-| `--board` | Kanban web em `http://127.0.0.1:3847` |
+| `--board` | Abre o quadro Kanban em `http://127.0.0.1:3847` |
 
 | Variável | Efeito |
 |---|---|
@@ -234,9 +246,9 @@ Quando o `detect-project.sh` está ao lado do `ralph.sh`, o preflight publica a 
 
 Exit code: `0` = todas as fases verdes; `1` = alguma falhou ou abortou.
 
-## `scripts/ralph-watch.sh` — painel ao vivo
+## `scripts/ralph-watch.sh` — painel no terminal
 
-O ralph publica o estado do run em `.phases/state/` **sempre**, com ou sem `--dashboard`. O `ralph-watch.sh` lê esse estado e desenha o painel:
+O quadro Kanban é a visualização do run. Este script é a mesma leitura, desenhada no terminal. O ralph publica o estado em `.phases/state/` **sempre**, com ou sem `--dashboard`. O `ralph-watch.sh` lê esse estado e desenha o painel:
 
 ```bash
 ./scripts/ralph.sh --engine claude --dashboard   # painel no próprio terminal
@@ -343,7 +355,9 @@ agents/                        specifier, clarifier, planner,
                                ai-context-{inspector,core,docs}
 scripts/
   ralph.sh                     orquestrador de execução por fases
-  ralph-watch.sh               painel ao vivo do run (lê .phases/state/)
+  ralph-board.py               quadro Kanban (127.0.0.1:3847)
+  ralph-board.html             interface do quadro
+  ralph-watch.sh               painel do run no terminal (lê .phases/state/)
   detect-project.sh            stack/ambiente OBSERVED (nunca lê .env)
   init-status.sh               painel da cadeia init (presença, freshness, stack)
   test-ralph.sh                suite red/green do ralph com engine mock
