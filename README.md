@@ -3,7 +3,7 @@
 rfc-harness is based on [bc-harness](https://github.com/beerandcodeteam/beer-and-code-harness) from [Beer and Code](https://beerandcode.com.br/). Canonical path: `/Volumes/M5SSD/Projetos/rfc-harness-v1`.
 
 ```
-ralph cursor | ralph claude | ralph minimax | ralph codex | ralph board
+ralph cursor | ralph claude | ralph minimax | ralph codex | ralph agy | ralph board
 ```
 
 ## Kanban board
@@ -211,7 +211,7 @@ Laravel Sail projects: the suite runs **inside the container** (`vendor/bin/sail
 
 | Option | Effect |
 |---|---|
-| `--engine codex\|claude\|cursor` | Implementation engine (default: `codex`) |
+| `--engine codex\|claude\|cursor\|minimax\|opencode\|agy` | Implementation engine (default: `codex`). `minimax` = OpenCode + MiniMax; `agy` = Antigravity CLI |
 | `--from N` | Starts at phase N (clears progress for phases ≥ N) |
 | `--keep-going` | Continues after a phase fails (creates a `wip(phase-N)` commit; default: stop) |
 | `--max-cycles N` | Fix cycles per phase (default: 3) |

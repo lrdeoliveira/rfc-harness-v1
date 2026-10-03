@@ -22,9 +22,10 @@
 #   ./ralph.sh [opcoes] [caminho-do-arquivo]
 #
 # Opcoes:
-#   --engine codex|claude|cursor|minimax|opencode
+#   --engine codex|claude|cursor|minimax|opencode|agy
 #                            engine de implementacao (default: codex)
 #                            minimax = OpenCode + MiniMax
+#                            agy = Antigravity CLI (Gemini)
 #   --from N                 comeca na fase N (limpa do progresso as fases >= N)
 #   --keep-going             continua apos uma fase falhar (default: para)
 #   --max-cycles N           ciclos de correcao por fase (default: 3)
@@ -108,7 +109,7 @@
 #   RALPH_BASH               interpretador Bash 4+ (default: Homebrew/paths abaixo)
 #
 # Exportadas para hooks (ex: notify-n8n.sh) durante cada sessao de engine:
-#   RALPH_ENGINE             codex | claude | cursor
+#   RALPH_ENGINE             codex | claude | cursor | minimax | opencode | agy
 #   RALPH_PHASE_TITLE        titulo da fase corrente
 #   RALPH_PHASE_NUM          numero da fase corrente
 #   RALPH_PHASE_TOTAL        total de fases do run
@@ -121,6 +122,7 @@
 #   - Codex: npm install -g @openai/codex + OPENAI_API_KEY
 #   - Claude: npm install -g @anthropic-ai/claude-code + ANTHROPIC_API_KEY
 #   - Cursor: Cursor Agent CLI (`agent` ou `cursor-agent`) + `agent login`
+#   - Antigravity: Antigravity CLI (`agy`)
 #   - Bash 4+ (no macOS /bin/bash e 3.2; brew install bash)
 #   - Raiz de um repo git, com a arvore de trabalho limpa
 
@@ -242,6 +244,36 @@ format_duration() {
     printf "%dm %ds" "$minutes" "$seconds"
   else
     printf "%ds" "$seconds"
+  fi
+}
+
+# GNU date aceita -d @epoch; o date do macOS nao, e responde "illegal option -- d".
+date_is_gnu() {
+  date --version >/dev/null 2>&1
+}
+
+format_epoch() {
+  local epoch="$1" fmt="$2" out=""
+  if date_is_gnu; then
+    out=$(date -d "@$epoch" "$fmt" 2>/dev/null || true)
+  else
+    out=$(date -r "$epoch" "$fmt" 2>/dev/null || true)
+  fi
+  printf '%s' "$out"
+}
+
+# "11:10am" / "3pm" -> epoch de hoje nesse horario. Vazio se nao reconhecer.
+parse_clock_epoch() {
+  local human="$1" compact
+  if date_is_gnu; then
+    date -d "$human" +%s 2>/dev/null || true
+    return 0
+  fi
+  compact=$(printf '%s' "$human" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+  if [[ "$compact" =~ ^[0-9]{1,2}:[0-9]{2}(AM|PM)$ ]]; then
+    date -j -f '%I:%M%p' "$compact" +%s 2>/dev/null || true
+  elif [[ "$compact" =~ ^[0-9]{1,2}(AM|PM)$ ]]; then
+    date -j -f '%I%p' "$compact" +%s 2>/dev/null || true
   fi
 }
 
@@ -463,7 +495,7 @@ load_project_facts() {
 }
 
 engine_uses_stream_json() {
-  [[ "$ENGINE" == "claude" || "$ENGINE" == "cursor" ]]
+  [[ "$ENGINE" == "claude" || "$ENGINE" == "cursor" || "$ENGINE" == "agy" ]]
 }
 
 # O nome do engine (--engine cursor) nao e o binario: o CLI e `agent`
@@ -472,6 +504,10 @@ resolve_engine_bin() {
   case "$ENGINE" in
     codex)  ENGINE_BIN="codex" ;;
     claude) ENGINE_BIN="claude" ;;
+    agy|antigravity)
+      ENGINE="agy"
+      ENGINE_BIN="agy"
+      ;;
     minimax|opencode)
       ENGINE_BIN="opencode"
       if [[ "$ENGINE" == "minimax" && -z "$OPENCODE_MODEL" ]]; then
@@ -493,8 +529,8 @@ resolve_engine_bin() {
 }
 
 preflight_checks() {
-  if [[ "$ENGINE" != "codex" && "$ENGINE" != "claude" && "$ENGINE" != "cursor" && "$ENGINE" != "minimax" && "$ENGINE" != "opencode" ]]; then
-    fail "Engine invalida: $ENGINE. Use 'codex', 'claude', 'cursor', 'minimax' ou 'opencode'."
+  if [[ "$ENGINE" != "codex" && "$ENGINE" != "claude" && "$ENGINE" != "cursor" && "$ENGINE" != "minimax" && "$ENGINE" != "opencode" && "$ENGINE" != "agy" && "$ENGINE" != "antigravity" ]]; then
+    fail "Engine invalida: $ENGINE. Use 'codex', 'claude', 'cursor', 'minimax', 'opencode' ou 'agy'."
     exit 1
   fi
 
@@ -522,6 +558,8 @@ preflight_checks() {
     VERIFY_MODEL="$RALPH_VERIFY_MODEL"
   elif [[ "$ENGINE" == "claude" ]]; then
     VERIFY_MODEL="sonnet"
+  elif [[ "$ENGINE" == "agy" ]]; then
+    VERIFY_MODEL="gemini-3.8-flash-high"
   fi
 
   resolve_engine_bin
@@ -535,6 +573,9 @@ preflight_checks() {
     elif [[ "$ENGINE" == "minimax" || "$ENGINE" == "opencode" ]]; then
       fail "Instale o OpenCode CLI (opencode) e autentique o MiniMax: opencode providers"
       fail "Causa: opencode CLI nao encontrado."
+    elif [[ "$ENGINE" == "agy" ]]; then
+      fail "Instale o Antigravity CLI (agy) ou garanta que esteja no PATH."
+      fail "Causa: agy CLI nao encontrado."
     else
       fail "Instale com: npm install -g @anthropic-ai/claude-code"
       fail "Causa: Claude Code CLI nao encontrado."
@@ -1142,6 +1183,30 @@ stream_watch() {
         esac
         sw_flush
         ;;
+      *'"step_type":"tool"'*|*'"tool_name":'*)
+        tool=$(json_str "$line" tool_name) || tool=""
+        case "$tool" in
+          run_command)
+            val=$(json_text "$line" CommandLine) || val=""
+            activity="bash: ${val:0:60}"
+            ;;
+          write_to_file|replace_file_content|multi_replace_file_content|sed_file)
+            val=$(json_str "$line" TargetFile) || val=""
+            activity="$tool: $(basename -- "${val:-?}")"
+            [ -n "$val" ] && sw_infer_from_file "$val"
+            ;;
+          view_file|read_resource|read_url_content)
+            val=$(json_str "$line" AbsolutePath) || val=""
+            activity="lendo: $(basename -- "${val:-projeto}")"
+            ;;
+          grep_search|find_by_name)
+            activity="buscando ($tool)"
+            ;;
+          ask_question|ask_permission|"") ;;
+          *) activity="$tool" ;;
+        esac
+        sw_flush
+        ;;
     esac
   done
   return 0
@@ -1448,8 +1513,8 @@ detect_usage_limit() {
   # O denominador comum e api_error_status 429 no JSON de resultado — casar so
   # a frase deixa o limite passar por gate 0 e queima todos os ciclos de
   # correcao em segundos, que e exatamente o que o invariante 4 evita.
-  if [[ "$ENGINE" == "claude" || "$ENGINE" == "cursor" ]]; then
-    pattern='usage limit reached|hit your (session|usage|[0-9]+-hour) limit|[0-9]+-hour limit reached|"api_error_status"[[:space:]]*:[[:space:]]*429|rate limit reached'
+  if [[ "$ENGINE" == "claude" || "$ENGINE" == "cursor" || "$ENGINE" == "agy" ]]; then
+    pattern='usage limit reached|hit your (session|usage|[0-9]+-hour) limit|[0-9]+-hour limit reached|"api_error_status"[[:space:]]*:[[:space:]]*429|rate limit reached|resource_exhausted|quota exceeded'
   else
     pattern='rate limit reached|quota exceeded|usage limit reached|too many requests'
   fi
@@ -1470,10 +1535,14 @@ detect_usage_limit() {
     human=$(grep -oiE 'resets?[[:space:]]+(at[[:space:]]+)?[0-9]{1,2}(:[0-9]{2})?[[:space:]]*(am|pm)' <<< "$tail_txt" \
       | grep -oiE '[0-9]{1,2}(:[0-9]{2})?[[:space:]]*(am|pm)' | tail -1 || true)
     if [ -n "$human" ]; then
-      epoch=$(date -d "$human" +%s 2>/dev/null || true)
+      epoch=$(parse_clock_epoch "$human")
       now=$(date +%s)
       if [ -n "$epoch" ] && [ "$epoch" -le "$now" ]; then
-        epoch=$(date -d "tomorrow $human" +%s 2>/dev/null || echo "$epoch")
+        if date_is_gnu; then
+          epoch=$(date -d "tomorrow $human" +%s 2>/dev/null || echo "$epoch")
+        else
+          epoch=$((epoch + 86400))
+        fi
       fi
     fi
   fi
@@ -1501,7 +1570,7 @@ wait_for_reset() {
     if [ "$wait_secs" -lt "$LIMIT_BUFFER" ]; then
       wait_secs=$LIMIT_BUFFER
     fi
-    warn "Limite de uso atingido. Reset previsto para $(date -d "@$epoch" '+%d/%m %H:%M:%S')."
+    warn "Limite de uso atingido. Reset previsto para $(format_epoch "$epoch" '+%d/%m %H:%M:%S')."
   else
     wait_secs=$LIMIT_WAIT_DEFAULT
     warn "Limite de uso atingido. Sem horario de reset no output; aguardando fallback."
@@ -1562,12 +1631,13 @@ engine_wait() {
   local pid="$1" log_file="$2"
   local stall="${RALPH_STALL_SECS:-180}"
   local tool_stall="${RALPH_TOOL_STALL_SECS:-1200}"
+  local poll_interval="${RALPH_ENGINE_POLL_SECS:-5}"
   local last_size=-1 last_change tool_open_since now size recovered=0
   last_change=$(date +%s)
   tool_open_since=0
 
   while kill -0 "$pid" 2>/dev/null; do
-    sleep 5
+    sleep "$poll_interval"
     kill -0 "$pid" 2>/dev/null || break
     size=0
     [ -f "$log_file" ] && size=$(wc -c < "$log_file" | tr -d ' ')
@@ -1588,7 +1658,11 @@ engine_wait() {
     fi
     [ "$size" -gt 0 ] && recovered=1
     kill_descendants "$pid" TERM
-    sleep 2
+    local wait_term=0
+    while kill -0 "$pid" 2>/dev/null && [ "$wait_term" -lt 20 ]; do
+      sleep 0.1
+      wait_term=$((wait_term + 1))
+    done
     if kill -0 "$pid" 2>/dev/null; then
       kill_descendants "$pid" KILL
     fi
@@ -1687,6 +1761,20 @@ run_engine() {
           --workspace "$PWD" \
           "$(cat "$prompt_file")" || rc=$?
       fi
+    elif [[ "$ENGINE" == "agy" ]]; then
+      if [[ "$mode" == "verify" ]]; then
+        spawn_engine_watched "$log_file" 0 0 0 "" \
+          "$ENGINE_BIN" -p "$(cat "$prompt_file")" "${model_args[@]}" \
+          --sandbox \
+          --output-format text || rc=$?
+      else
+        local quiet=0
+        $DASHBOARD && quiet=1
+        spawn_engine_watched "$log_file" 1 "${RALPH_PHASE_NUM:-0}" "$quiet" "$CURRENT_PHASE_FILE" \
+          "$ENGINE_BIN" -p "$(cat "$prompt_file")" "${model_args[@]}" \
+          --dangerously-skip-permissions \
+          --output-format stream-json || rc=$?
+      fi
     elif [[ "$ENGINE" == "minimax" || "$ENGINE" == "opencode" ]]; then
       local oc_model=()
       if [ -n "$OPENCODE_MODEL" ]; then
@@ -1763,6 +1851,19 @@ gate0_engine_finished() {
     if [ -n "$result_line" ]; then
       if grep -qE '"is_error"[[:space:]]*:[[:space:]]*true' <<< "$result_line"; then
         GATE_CAUSE="O engine reportou is_error=true no resultado. Ultimas linhas do output:"$'\n'"$(tail -n 40 "$log_file")"
+        return 1
+      fi
+    elif [[ "$ENGINE" == "agy" ]]; then
+      local agy_result
+      agy_result=$(grep -F '"event":"result"' "$log_file" | tail -n 1)
+      [ -z "$agy_result" ] && agy_result=$(grep -F '"event": "result"' "$log_file" | tail -n 1)
+      if [ -n "$agy_result" ]; then
+        if grep -qE '"status"[[:space:]]*:[[:space:]]*"ERROR"' <<< "$agy_result" || grep -qE '"is_error"[[:space:]]*:[[:space:]]*true' <<< "$agy_result"; then
+          GATE_CAUSE="O engine agy reportou erro no resultado. Ultimas linhas do output:"$'\n'"$(tail -n 40 "$log_file")"
+          return 1
+        fi
+      else
+        GATE_CAUSE="O engine agy terminou sem emitir um resultado. Ultimas linhas do output:"$'\n'"$(tail -n 40 "$log_file")"
         return 1
       fi
     elif [[ "$ENGINE" == "claude" ]]; then
@@ -2299,14 +2400,17 @@ main() {
     fi
   done 3< <(manifest_entries)
 
-  local end_time total_duration
+  local end_time total_duration failed_count
   end_time=$(date +%s)
   total_duration=$((end_time - start_time))
+  # Inteiro, nao ${#array[@]} no fechamento: com set -u o array vazio nessa
+  # forma derrubou o run ja concluido (exit 2) no bash do macOS.
+  failed_count=${#failed_phases[@]}
 
   META[ended]="$end_time"
   META[activity]=""
   META[gate]=""
-  if [ ${#failed_phases[@]} -eq 0 ]; then META[status]="finished"; else META[status]="failed"; fi
+  if [ "$failed_count" -eq 0 ]; then META[status]="finished"; else META[status]="failed"; fi
   # O live.tsv e da sessao, nao do run: mante-lo faria o painel exibir para
   # sempre a ultima acao de uma sessao que ja terminou.
   : > "$LIVE_STATE"
@@ -2334,21 +2438,21 @@ main() {
     for phase in "${skipped_phases[@]}"; do printf '    %s\n' "$phase"; done
   fi
 
-  if [ ${#failed_phases[@]} -gt 0 ]; then
+  if [ "$failed_count" -gt 0 ]; then
     echo ""
-    fail "Falharam (${#failed_phases[@]}):"
+    fail "Falharam ($failed_count):"
     for phase in "${failed_phases[@]}"; do printf '    %b%s%b\n' "$RED" "$phase" "$NC"; done
     echo ""
     fail "Verifique os logs em $LOG_DIR/"
   fi
 
   echo ""
-  log "Inicio: $(date -d "@$start_time" '+%d/%m/%Y %H:%M:%S')"
-  log "Fim:    $(date -d "@$end_time" '+%d/%m/%Y %H:%M:%S')"
+  log "Inicio: $(format_epoch "$start_time" '+%d/%m/%Y %H:%M:%S')"
+  log "Fim:    $(format_epoch "$end_time" '+%d/%m/%Y %H:%M:%S')"
   log "Duracao total: $(format_duration "$total_duration")"
   echo ""
 
-  [ ${#failed_phases[@]} -eq 0 ] || exit 1
+  [ "$failed_count" -eq 0 ] || exit 1
 }
 
 # RALPH_LIB_ONLY=1 carrega as funcoes sem executar o run — a suite usa isso

@@ -22,5 +22,6 @@ ralph cursor
 ralph claude
 ralph minimax
 ralph codex
+ralph agy
 ralph board
 ```

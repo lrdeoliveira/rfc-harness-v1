@@ -9,6 +9,7 @@ ralph cursor          # Cursor Agent + board
 ralph claude          # Claude Code + board
 ralph minimax         # OpenCode + MiniMax + board
 ralph codex           # Codex CLI + board
+ralph agy             # Antigravity CLI + board
 ralph board           # só o Kanban (http://127.0.0.1:3847)
 ```
 
@@ -216,7 +217,7 @@ Projeto Laravel Sail: a suite roda **dentro do container** (`vendor/bin/sail tes
 
 | Opção | Efeito |
 |---|---|
-| `--engine codex\|claude\|cursor\|minimax\|opencode` | Engine de implementação (default: `codex`). `minimax` = OpenCode + MiniMax |
+| `--engine codex\|claude\|cursor\|minimax\|opencode\|agy` | Engine de implementação (default: `codex`). `minimax` = OpenCode + MiniMax; `agy` = Antigravity CLI |
 | `--from N` | Começa na fase N (limpa o progresso das fases ≥ N) |
 | `--keep-going` | Continua após fase falhar (cria commit `wip(phase-N)`; default: para) |
 | `--max-cycles N` | Ciclos de correção por fase (default: 3) |

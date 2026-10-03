@@ -21,6 +21,7 @@ rfc-harness-v1 2.0.0  —  na raiz do git do projeto
   ralph claude [arquivo]     Claude Code
   ralph minimax [arquivo]    OpenCode + MiniMax
   ralph codex [arquivo]      Codex CLI
+  ralph agy [arquivo]        Antigravity CLI (agy)
   ralph board                só o Kanban (http://127.0.0.1:${PORT})
 
 Sem arquivo: .spec/init/project-phases.md  (ou o PHASES.md que o ralph achar)
@@ -49,7 +50,7 @@ case "$cmd" in
     echo "Kanban em http://127.0.0.1:${PORT}  (Ctrl-C para sair)"
     wait "$pid"
     ;;
-  cursor|claude|codex|minimax|opencode)
+  cursor|claude|codex|minimax|opencode|agy|antigravity)
     exec bash "$RALPH" --engine "$cmd" --board "$@"
     ;;
   *)
