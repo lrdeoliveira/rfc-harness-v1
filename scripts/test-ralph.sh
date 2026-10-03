@@ -38,7 +38,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # RALPH_BIN permite apontar para uma copia patchada (prova red dos testes).
 RALPH="${RALPH_BIN:-$ROOT/scripts/ralph.sh}"
-ONLY="${1:-}"
+ONLY="${1:-${ONLY:-}}"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -130,6 +130,18 @@ elif [ "$name" = "agent" ] || [ "$name" = "cursor-agent" ]; then
     esac
   done
   prompt="${leftover[*]}"
+elif [ "$name" = "agy" ]; then
+  [ -t 0 ] || cat > /dev/null
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -p|--print) prompt="$2"; shift 2 ;;
+      --sandbox) verify=1; shift ;;
+      --model) model="$2"; shift 2 ;;
+      --output-format) outfmt="$2"; shift 2 ;;
+      --dangerously-skip-permissions) shift ;;
+      *) shift ;;
+    esac
+  done
 else
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -266,6 +278,20 @@ if [ "$name" = "claude" ] || [ "$name" = "agent" ] || [ "$name" = "cursor-agent"
     fi
   fi
   emit_claude_ok
+elif [ "$name" = "agy" ]; then
+  if [ "$outfmt" = "stream-json" ]; then
+    n_tasks=$(grep -cE '^[[:space:]]*- \[[ x]\]' <<< "$prompt")
+    echo '{"event":"init","init":{"cwd":"'$(pwd)'"}}'
+    for i in $(seq 1 "$n_tasks"); do
+      echo '{"event":"step_update","step_update":{"state":"ACTIVE","step_type":"tool","tool_name":"write_to_file","tool_info":{"name":"write_to_file","parameters":{"TargetFile":"src/impl-'$i'.txt"}}}}'
+      echo '{"event":"step_update","step_update":{"state":"DONE","step_type":"tool","tool_name":"write_to_file"}}'
+      echo '{"event":"step_update","step_update":{"state":"DONE","step_type":"agent_response","text_delta":"RALPH-TASK '$i' START\n"}}'
+      echo '{"event":"step_update","step_update":{"state":"DONE","step_type":"agent_response","text_delta":"RALPH-TASK '$i' DONE\n"}}'
+    done
+    echo '{"event":"result","result":{"status":"SUCCESS","response":"concluido"}}'
+  else
+    echo "Done."
+  fi
 else
   echo "Done."
 fi
@@ -277,6 +303,7 @@ MOCK
   cp "$bin/mock-engine" "$bin/codex"
   cp "$bin/mock-engine" "$bin/agent"
   cp "$bin/mock-engine" "$bin/cursor-agent"
+  cp "$bin/mock-engine" "$bin/agy"
 }
 
 make_testcmd() {
@@ -364,16 +391,14 @@ SAILMOCK
   chmod +x "$repo/vendor/bin/sail"
 }
 
-# new_case <nome> -> ecoa o diretorio do repo fixture
-new_case() {
-  local name="$1"
-  local dir="$TMP/$name"
-  mkdir -p "$dir/repo" "$dir/state" "$dir/bin"
-  make_mocks "$dir/bin"
-  make_testcmd "$dir/test.sh"
+init_fixture_template() {
+  local tpl="$TMP/_template"
+  mkdir -p "$tpl/repo" "$tpl/bin"
+  make_mocks "$tpl/bin"
+  make_testcmd "$tpl/test.sh"
 
   (
-    cd "$dir/repo" || exit 1
+    cd "$tpl/repo" || exit 1
     git init -q
     git config user.email "test@ralph"
     git config user.name "Ralph Test"
@@ -382,6 +407,16 @@ new_case() {
     git add -A
     git commit -q -m "chore: fixture"
   )
+}
+
+# new_case <nome> -> ecoa o diretorio do repo fixture
+new_case() {
+  local name="$1"
+  local dir="$TMP/$name"
+  [ -d "$TMP/_template" ] || init_fixture_template
+  rm -rf "$dir"
+  cp -R "$TMP/_template" "$dir"
+  mkdir -p "$dir/state"
   echo "$dir"
 }
 
@@ -401,6 +436,7 @@ run_ralph() {
     MOCK_TEST_CMD="$dir/test.sh" \
     RALPH_LIMIT_WAIT_DEFAULT=1 \
     RALPH_LIMIT_BUFFER=1 \
+    RALPH_ENGINE_POLL_SECS=0.5 \
     RALPH_VERIFY="${CASE_VERIFY:-}" \
     RALPH_VERIFY_MODEL="${CASE_VERIFY_MODEL:-}" \
       bash "$RALPH" "$@" > "$dir/out.log" 2>&1
@@ -421,6 +457,7 @@ run_ralph_env() {
     MOCK_TEST_CMD="$dir/test.sh" \
     RALPH_LIMIT_WAIT_DEFAULT=1 \
     RALPH_LIMIT_BUFFER=1 \
+    RALPH_ENGINE_POLL_SECS=0.5 \
       bash "$RALPH" "$@" > "$dir/out.log" 2>&1
   ) || rc=$?
   echo "$rc"
@@ -446,6 +483,8 @@ if case_enabled ok-first; then
   assert_eq "feat(phase-2): Feature" "$(git -C "$d/repo" log -1 --pretty=%s)" "mensagem de commit da ultima fase"
   assert_eq 2 "$(cat "$d/state/impl_calls")" "1 sessao de implementacao por fase (2 fases)"
   assert_eq 2 "$(cat "$d/state/verify_calls")" "gate 3 (default always) rodou em toda fase"
+  assert_contains "$d/out.log" "Inicio: $(date '+%d/%m/%Y')" "relatorio mostra a data de inicio"
+  assert_not_contains "$d/out.log" "illegal option" "date do macOS nao vaza no relatorio"
 fi
 
 # ---------------------------------------------------------------------------
@@ -508,7 +547,8 @@ if case_enabled limit-epoch; then
   assert_eq 0 "$rc" "exit 0 (limite nao consome ciclo)"
   assert_eq 3 "$(commits "$d")" "fases commitadas apos a espera"
   assert_contains "$d/out.log" "Limite de uso atingido" "limite detectado"
-  assert_contains "$d/out.log" "Reset previsto para" "epoch de reset extraido do log"
+  assert_contains "$d/out.log" "Reset previsto para $(date '+%d/%m')" "horario de reset formatado"
+  assert_not_contains "$d/out.log" "illegal option" "date do macOS nao vaza no aviso de limite"
 fi
 
 # ---------------------------------------------------------------------------
@@ -910,7 +950,7 @@ if case_enabled live-progress; then
     cd "$d/repo" || exit 1
     env -u RALPH_TEST_CMD -u RALPH_MAX_CYCLES \
     PATH="$d/bin:$PATH" MOCK_STATE="$d/state" MOCK_SCENARIO=stream-slow \
-    MOCK_TEST_CMD="$d/test.sh" MOCK_SLOW_SECS=6 RALPH_VERIFY=off \
+    MOCK_TEST_CMD="$d/test.sh" MOCK_SLOW_SECS=1.2 RALPH_VERIFY=off \
       bash "$RALPH" --engine claude --test-cmd "$d/test.sh" > "$d/out.log" 2>&1
   ) &
   ralph_pid=$!
@@ -919,11 +959,11 @@ if case_enabled live-progress; then
   snap=""
   for _ in $(seq 1 100); do
     if [ -f "$d/state/slow_midpoint" ]; then
-      sleep 0.5
+      sleep 0.08
       snap=$(cat "$d/repo/.phases/state/live.tsv" 2>/dev/null)
       break
     fi
-    sleep 0.2
+    sleep 0.05
   done
 
   phase_snap=$(grep -E '^PHASE[[:space:]]+1[[:space:]]' "$d/repo/.phases/state/run.tsv" 2>/dev/null || true)
@@ -1413,7 +1453,7 @@ if case_enabled watch-frame; then
     tmux kill-session -t ralph-frame-test 2>/dev/null || true
     tmux new-session -d -s ralph-frame-test -x 120 -y 16 \
       "bash '$WATCH' --embedded --interval 1 '$d/repo'" 2>/dev/null || true
-    sleep 4
+    sleep 1
     tmux capture-pane -p -t ralph-frame-test > "$d/pane.txt" 2>/dev/null || true
     tmux kill-session -t ralph-frame-test 2>/dev/null || true
 
@@ -1466,7 +1506,8 @@ if case_enabled cursor-hang; then
     MOCK_TEST_CMD="$d/test.sh" \
     RALPH_LIMIT_WAIT_DEFAULT=1 \
     RALPH_LIMIT_BUFFER=1 \
-    RALPH_STALL_SECS=3 \
+    RALPH_STALL_SECS=1 \
+    RALPH_ENGINE_POLL_SECS=0.2 \
       bash "$RALPH" --engine cursor --test-cmd "$d/test.sh" --max-cycles 1 > "$d/out.log" 2>&1
   ) || rc=$?
   assert_eq 0 "$rc" "exit 0"
@@ -1625,6 +1666,44 @@ if case_enabled ralph-evidence; then
 
   RALPH_WATCH_COLS=110 "$ROOT/scripts/ralph-watch.sh" --once --no-color "$d/repo" > "$d/panel.txt" 2>&1
   assert_contains "$d/panel.txt" "Stack:" "painel mostra a stack"
+fi
+
+# ---------------------------------------------------------------------------
+# 45. Engine agy usa binario agy com stream-json e sandbox
+# ---------------------------------------------------------------------------
+if case_enabled agy-engine; then
+  header "45. engine agy usa binario agy com stream-json e sandbox"
+  d=$(new_case agy-engine)
+  rc=$(run_ralph "$d" ok --engine agy --test-cmd "$d/test.sh")
+  assert_eq 0 "$rc" "exit 0"
+  assert_eq 3 "$(commits "$d")" "2 commits de fase (1 fixture + 2)"
+  assert_eq 2 "$(cat "$d/state/impl_calls")" "1 sessao de implementacao por fase (2 fases)"
+  assert_eq 2 "$(cat "$d/state/verify_calls")" "gate 3 rodou em toda fase (--sandbox)"
+  assert_eq "gemini-3.8-flash-high" "$(cat "$d/state/verify_model")" "verificador usa modelo barato default gemini-3.8-flash-high"
+  assert_contains "$d/out.log" "engine: agy" "log identifica engine agy"
+fi
+
+# ---------------------------------------------------------------------------
+# 46. Engine agy sem binario no PATH -> abort no preflight
+# ---------------------------------------------------------------------------
+if case_enabled agy-missing; then
+  header "46. engine agy sem binario no PATH -> abort"
+  d=$(new_case agy-missing)
+  rc=0
+  bash_dir=$(dirname "$(command -v bash)")
+  (
+    cd "$d/repo" || exit 1
+    env -u RALPH_TEST_CMD -u RALPH_MAX_CYCLES -u RALPH_MAX_LIMIT_WAITS \
+    PATH="$bash_dir:/usr/bin:/bin" \
+    MOCK_STATE="$d/state" \
+    MOCK_SCENARIO=ok \
+    MOCK_TEST_CMD="$d/test.sh" \
+    RALPH_LIMIT_WAIT_DEFAULT=1 \
+    RALPH_LIMIT_BUFFER=1 \
+      bash "$RALPH" --engine agy --test-cmd "$d/test.sh" > "$d/out.log" 2>&1
+  ) || rc=$?
+  assert_eq 1 "$rc" "exit 1"
+  assert_contains "$d/out.log" "agy CLI nao encontrado" "mensagem aponta o CLI certo (agy)"
 fi
 
 # ---------------------------------------------------------------------------
